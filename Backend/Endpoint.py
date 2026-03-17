@@ -1,6 +1,7 @@
 # app.py
 from flask import Flask, request, jsonify
 import yfinance as yf
+from StickDataCollector import yf_aggregator
 
 endpoint = Flask(__name__)
 
