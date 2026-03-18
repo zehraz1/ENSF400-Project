@@ -5,7 +5,7 @@ class yf_aggregator:
     def __init__(self, ticker: str):
         self.t = yf.Ticker(ticker)
 
-    def is_valid_ticker(self, ticker: str) -> bool:
+    def is_valid_ticker(self) -> bool:
         try:
             return len(self.t.calendar) > 0
         except Exception:
