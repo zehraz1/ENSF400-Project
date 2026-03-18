@@ -1,7 +1,8 @@
 # app.py
 from flask import Flask, request, jsonify
 import yfinance as yf
-from StickDataCollector import yf_aggregator
+from StockDataCollector import yf_aggregator
+from LLMHandler import generate_summary
 
 endpoint = Flask(__name__)
 
@@ -10,13 +11,22 @@ endpoint = Flask(__name__)
 def hello():
     request_data = request.get_json()
 
+    #not sure how we are getting the data from the front end for now
+    ticker = request_data.get("ticker")
+
+    agg = yf_aggregator(ticker)
+
     # get context from yfinance news and general api functions
+    fin = agg.get_fin_data()
+    news = agg.get_news_data()
 
     # send context to gemini handler
 
     # get output from gemini handler
+    summary = generate_summary(fin, news)
 
     # return jsonified output
+    return jsonify({"ticker": ticker, "summary": summary})
 
 
 if __name__ == '__main__':
