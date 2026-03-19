@@ -30,7 +30,7 @@ class yf_aggregator:
             return isinstance(value, float) and math.isnan(value)
         except Exception:
             return False
-        
+
     def _sanitize_value(self, value: Any) -> Any:
         """
         Convert values from yfinance/pandas/numpy into JSON-safe values. 
@@ -71,7 +71,6 @@ class yf_aggregator:
         # Fallback: convert to string
         return str(value) 
 
-
     def is_valid_ticker(self) -> bool: 
         """
         Validate ticker by attempting to retrieve recent price history.
@@ -85,7 +84,7 @@ class yf_aggregator:
             return history is not None and not history.empty
         except Exception:
             return False
-        
+
     def _get_company_info(self) -> Dict[str, Any]:
         """
         Extract important company info fields. 
@@ -127,7 +126,7 @@ class yf_aggregator:
             result[field] = self._sanitize_value(value)
 
         return result
-    
+
     def _get_price_history(self, period: str = '1mo') -> List[Dict[str, Any]]:
         """
         Retrieve historical price data and then convert into JSON format
@@ -235,7 +234,7 @@ class yf_aggregator:
 
         except Exception:
             return {}
-        
+
     def get_news_data(self) -> Optional[List[Dict[str, Any]]]:
         """
         Retrieve and parse news data into JSON.
@@ -279,7 +278,6 @@ class yf_aggregator:
         except Exception:
             return []
 
-
     def get_fin_data(self) -> Optional[Dict[str, Any]]:
         """
         Aggregate all financial data into single dictionary. 
@@ -297,7 +295,7 @@ class yf_aggregator:
             "priceHistory": self._get_price_history(period='1mo'),
             "optionChainSummary": self._get_option_chain_summary(),
         }
-    
+
     def get_risk_metrics(self) -> Dict[str, Any]:
         """
         Compute simple risk metrics:
