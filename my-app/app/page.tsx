@@ -11,8 +11,14 @@ type AnalysisResult = {
   pros: string[];
   cons: string[];
 };
+
+type TickerType = {
+  ticker: string;
+  name: string;
+};
+
 // temporary - just hard coded for now
-const TICKERS = [
+const TICKERS: TickerType[] = [
   { ticker: "AAPL", name: "Apple" },
   { ticker: "MSFT", name: "Microsoft" },
   { ticker: "GOOGL", name: "Alphabet (Google)" },
@@ -29,14 +35,14 @@ const TICKERS = [
 ];
 
 export default function Home() {
-  const [ticker, setTicker] = useState("AAPL");
+  const [ticker, setTicker] = useState<string>("AAPL");
   const [investedAmount, setInvestedAmount] = useState<string>("1000");
   const [portfolioSize, setPortfolioSize] = useState<string>("10000");
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>("medium");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
-  const positionPercentage = useMemo(() => {
+  const positionPercentage = useMemo<number>(() => {
     const invested = Number(investedAmount);
     const portfolio = Number(portfolioSize);
 
@@ -48,56 +54,101 @@ export default function Home() {
     return (invested / portfolio) * 100;
   }, [investedAmount, portfolioSize]);
 
-  const filteredTickers = useMemo(() => {
+  const filteredTickers = useMemo<TickerType[]>(() => {
     return TICKERS.filter(
-      (t) => t.ticker.includes(ticker) || t.name.toUpperCase().includes(ticker) // match ticker or name
+      (t: TickerType) => t.ticker.includes(ticker) || t.name.toUpperCase().includes(ticker.toUpperCase())
     ).slice(0, 10); // limit to 10 results in dropdown
   }, [ticker]);
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async (): Promise<void> => {
     setLoading(true);
     
-    // Simulate API call with timeout
-    setTimeout(() => {
-      // Mock data based on which ticker is selected
-      const mockResults: {
-  [key: string]: AnalysisResult
-} = {
-        AAPL: {
-          summary: "Apple Inc. shows strong performance with recent product launches. Revenue grew 5% in Q1 2024 with services segment reaching all-time high. iPhone sales remain stable despite market competition.",
-          advice: `Based on your $${investedAmount} investment and ${riskTolerance} risk tolerance, consider dollar-cost averaging into this position over 3 months.`,
-          riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High",
-          pros: ["Strong brand loyalty", "Growing services revenue", "Healthy cash reserves"],
-          cons: ["Market saturation", "Regulatory challenges", "Supply chain dependencies"]
+    try {
+      // Call the real Flask backend
+      const response = await fetch('http://localhost:5000', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        MSFT: {
-          summary: "Microsoft continues to dominate cloud computing with Azure growth of 20%. AI integration across products is driving new revenue streams. Strong enterprise relationships provide stability.",
-          advice: `With your $${investedAmount} portfolio and ${riskTolerance} tolerance, Microsoft offers balanced growth potential.`,
-          riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "Medium",
-          pros: ["Cloud leadership", "AI innovation", "Recurring revenue"],
-          cons: ["High valuation", "Regulatory scrutiny", "Competition from AWS"]
-        },
-        NVDA: {
-          summary: "NVIDIA is the undisputed leader in AI chips with 80% market share. Data center revenue doubled year-over-year. New product launches continue to push performance boundaries.",
-          advice: `$${investedAmount} in NVIDIA aligns with your ${riskTolerance} profile, but consider the high volatility.`,
-          riskLevel: "High",
-          pros: ["AI market leader", "Strong growth", "High margins"],
-          cons: ["Very volatile", "High valuation", "Competition increasing"]
-        }
-      };
+        body: JSON.stringify({
+          ticker: ticker,
+          invested_amount: parseInt(investedAmount),
+          portfolio_size: parseInt(portfolioSize),
+          risk_tolerance: riskTolerance
+        })
+      });
 
-      // Use mock data for the selected ticker, or a default if not found
-      const selectedResult = mockResults[ticker] || {
-        summary: `${ticker} is showing mixed signals in recent trading. Consider monitoring closely before making decisions.`,
-        advice: `With $${investedAmount} at ${riskTolerance} risk, diversify across sectors to reduce exposure.`,
-        riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High",
-        pros: ["Liquid stock", "Market presence", "Analyst coverage"],
-        cons: ["Recent volatility", "Earnings soon", "Sector headwinds"]
+      if (!response.ok) {
+        throw new Error('Failed to fetch analysis');
+      }
+
+      interface BackendResponse {
+        ticker: string;
+        summary: string;
+        advice: string;
+      }
+
+      const data: BackendResponse = await response.json();
+      
+      // Parse the advice text to extract recommendation, pros, cons, etc.
+      const adviceText: string = data.advice || "";
+      
+      // Default values
+      let recommendation: string = "Hold";
+      let riskLevel: string = riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High";
+      let pros: string[] = [];
+      let cons: string[] = [];
+      let explanation: string = "";
+      
+      // Try to extract structured data from the advice text
+      const recommendationMatch = adviceText.match(/RECOMMENDATION:\s*(\w+)/i);
+      if (recommendationMatch) recommendation = recommendationMatch[1];
+      
+      const riskMatch = adviceText.match(/RISK LEVEL:\s*(\w+)/i);
+      if (riskMatch) riskLevel = riskMatch[1];
+      
+      const prosMatch = adviceText.match(/PROS:\s*([\s\S]*?)(?=CONS:|$)/i);
+      if (prosMatch) {
+        pros = prosMatch[1]
+          .split('\n')
+          .filter((line: string) => line.trim().startsWith('-'))
+          .map((line: string) => line.replace('-', '').trim())
+          .slice(0, 3);
+      }
+      
+      const consMatch = adviceText.match(/CONS:\s*([\s\S]*?)(?=EXPLANATION:|$)/i);
+      if (consMatch) {
+        cons = consMatch[1]
+          .split('\n')
+          .filter((line: string) => line.trim().startsWith('-'))
+          .map((line: string) => line.replace('-', '').trim())
+          .slice(0, 3);
+      }
+      
+      const explanationMatch = adviceText.match(/EXPLANATION:\s*([\s\S]*?)$/i);
+      if (explanationMatch) explanation = explanationMatch[1].trim();
+      
+      const resultData: AnalysisResult = {
+        summary: data.summary,
+        advice: explanation || adviceText,
+        riskLevel: riskLevel,
+        pros: pros.length > 0 ? pros : ["Recommendation: " + recommendation],
+        cons: cons.length > 0 ? cons : ["See full advice above"]
       };
       
-      setResult(selectedResult);
+      setResult(resultData);
+    } catch (error: unknown) {
+      console.error('Error:', error);
+      setResult({
+        summary: "Error: Could not connect to backend. Make sure the Flask server is running at http://localhost:5000",
+        advice: "Please start the backend server and try again",
+        riskLevel: "N/A",
+        pros: ["Check if backend is running"],
+        cons: ["Run 'python Endpoint.py' in backend folder", "Verify no errors in terminal"]
+      });
+    } finally {
       setLoading(false);
-    }, 2000); // 2 second delay to simulate loading
+    }
   };
 
   return (
@@ -124,13 +175,12 @@ export default function Home() {
                 <input
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
                   value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())} // force user input to be capitalized
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTicker(e.target.value.toUpperCase())}
                   placeholder="e.g. AAPL or Apple"
                   list="ticker-list"
                 />
-                {/* dropdown suggestions from filteredTickers */}
                 <datalist id="ticker-list">
-                  {filteredTickers.map((t) => (
+                  {filteredTickers.map((t: TickerType) => (
                     <option key={t.ticker} value={t.ticker}>{t.name}</option>
                   ))}
                 </datalist>
@@ -142,37 +192,31 @@ export default function Home() {
                 <input
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
                   value={investedAmount}
-                  onChange={(e) => {
-                    // Regex checks digits
-                    // returns true or false
-                    // only update if input is digits
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     if (/^\d*$/.test(e.target.value)) setInvestedAmount(e.target.value);
                   }}
                   placeholder="1000"
                 />
               </label>
               
-              {/* Position size - editable */}
+              {/* Portfolio Size */}
               <label className="grid gap-1">
                 <span className="text-xs text-zinc-400">Portfolio Size ($)</span>
                 <input
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
                   value={portfolioSize}
-                  onChange={(e) => {
-                    // Regex checks digits
-                    // returns true or false
-                    // only update if input is digits
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     if (/^\d*$/.test(e.target.value)) setPortfolioSize(e.target.value);
                   }}
                   placeholder="10000"
                 />
               </label>
 
-              {/* Position size - not editable, just calculated */}
+              {/* Position size - calculated */}
               <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-zinc-400">Position Size</span>
-                  <span className="text-sm">{positionPercentage.toFixed(1)}%</span> {/* 1 decimal place */}
+                  <span className="text-sm">{positionPercentage.toFixed(1)}%</span>
                 </div>
               </div>
               
@@ -182,7 +226,7 @@ export default function Home() {
                 <select
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
                   value={riskTolerance}
-                  onChange={(e) => setRiskTolerance(e.target.value as RiskTolerance)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRiskTolerance(e.target.value as RiskTolerance)}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -235,13 +279,13 @@ export default function Home() {
                     <div>
                       <h4 className="font-medium text-green-400">Pros</h4>
                       <ul className="list-disc pl-4 text-zinc-300">
-                        {result.pros.map((pro, i) => <li key={i}>{pro}</li>)}
+                        {result.pros.map((pro: string, i: number) => <li key={i}>{pro}</li>)}
                       </ul>
                     </div>
                     <div>
                       <h4 className="font-medium text-red-400">Cons</h4>
                       <ul className="list-disc pl-4 text-zinc-300">
-                        {result.cons.map((con, i) => <li key={i}>{con}</li>)}
+                        {result.cons.map((con: string, i: number) => <li key={i}>{con}</li>)}
                       </ul>
                     </div>
                   </div>
