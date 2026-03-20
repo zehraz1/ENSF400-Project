@@ -38,7 +38,7 @@ def get_stock_info():
     return cache.get_stock_info_cache(ticker, ttl_hash=cache.get_ttl_hash())
 
 
-@endpoint.route('/price', methods=['POST'])
+@endpoint.route('/price', methods=['GET'])
 def get_price():
     """
     Get the most recent price for a stock
@@ -54,7 +54,7 @@ def get_price():
     return cache.get_price_cache(ticker, ttl_hash=cache.get_ttl_hash(60))
 
 
-@endpoint.route('/convert', methods=['POST'])
+@endpoint.route('/convert', methods=['GET'])
 def convert_currency():
     """ get the conversion rate between two currencies.
     cache for efficiency
@@ -69,7 +69,7 @@ def convert_currency():
                                         ttl=cache.get_ttl_hash())
 
 
-@endpoint.route('/search/<query>', methods=['POST'])
+@endpoint.route('/search', methods=['GET'])
 def search_ticker():
     """
     Gets valid ticker suggestions from some typed search
@@ -83,4 +83,4 @@ def search_ticker():
     return cache.search_ticker_cache(query)
 
 if __name__ == '__main__':
-    endpoint.run(host='0.0.0.0')
+    endpoint.run()
