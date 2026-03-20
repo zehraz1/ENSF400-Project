@@ -18,9 +18,9 @@ def get_advice():
     {"pros": ..., "cons": ..., "summary": ...}
     and cache for efficiency
     """
-    request_data = request.json()
-
-    ticker = request_data.get("ticker")
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
 
     return cache.get_advice_cache(ticker, ttl_hash=cache.get_ttl_hash())
 
