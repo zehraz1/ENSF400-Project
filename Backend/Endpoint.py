@@ -5,121 +5,82 @@ import yfinance as yf
 from StockDataCollector import yf_aggregator
 from LLMHandler import generate_summary
 from functools import lru_cache
-from typing import Any, List, Dict, Optional
 import time
-import threading
+import StockDataCache as cache
 
 endpoint = Flask(__name__)
 CORS(endpoint)
 
-@lru_cache(maxsize=32)
-def get_stock_info_cache(ticker, ttl_hash=None) -> Dict[str, Any]:
-    stock = yf_aggregator(ticker)
-
-    if not stock.is_valid_ticker():
-        return None
-
-    news = stock.get_news_data()
-    company_name = stock.get_company_info()["shortName"]
-    stock_history = stock.get_price_history()
-
-    # create a temporary thread to cache the get_advice
-    # test this to see if it actually helps performance (this will use too many tokens
-    #                                                      so ignore for now)
-    # temp_thread = threading.Thread(target=get_advice_cache, args=(ticker, ttl_hash))
-    # temp_thread.start()
-
-    return {"company_name": company_name, \
-            "stock_history": stock_history, "news": news}
-
-
-@lru_cache(maxsize=32)
-def get_advice_cache(ticker, ttl_hash=None) -> Dict[str, Any]:
-    # this will change with the implementation of the LLM
-
-    # return {"summary": string, "advice": string}
-    pass
-
-
-def get_ttl_hash(seconds=86400) -> int: # default ttl to one day
-    """
-    Get a hash value for the time to live. Rather than reset the cache 
-    after TTL has expired, just reload the values every n seconds. This
-    time will depend on how long the stock_history we expect to collect
-    @Param seconds: the ttl in seconds
-    """
-    return round(time.time() / seconds)
-
 
 @endpoint.route('/', methods=['POST'])
 def get_advice():
+    """Get stock advice in the form
+    {"pros": ..., "cons": ..., "summary": ...}
+    and cache for efficiency
+    """
     request_data = request.json()
 
     ticker = request_data.get("ticker")
 
-    data = get_advice_cache(ticker, ttl_hash=get_ttl_hash())
-
-    # {"summary": string, "advice": string}
-    return jsonify(data)
+    return cache.get_advice_cache(ticker, ttl_hash=cache.get_ttl_hash())
 
 
 @endpoint.route('/get_graphs_news', methods=['POST'])
 def get_stock_info():
-    request_data = request.json()
-
-    ticker = request_data.get("ticker")
-
-    data = get_stock_info_cache(ticker, ttl_hash=get_ttl_hash())
-
-    # return jsonify({"valid": bool, "company_name": string, \
-    #                   "stock_history": list(dict(date, price))})
-    return jsonify(data)
-
-@endpoint.route('/price', methods=['GET'])
-def get_price():
+    """Get stock info in the form
+    {"company name" ..., "stock history" ..., "news": ...}
+    and cache for efficiency
+    """
     ticker = request.args.get("ticker")
     if not ticker:
         return jsonify({"error": "ticker is required"}), 400
-    agg = yf_aggregator(ticker)
-    if not agg.is_valid_ticker():
-        return jsonify({"error": "invalid ticker"}), 404
-    info = agg._get_company_info()
-    return jsonify({
-        "ticker": ticker,
-        "price": info.get("currentPrice"),
-        "currency": info.get("currency"),
-    })
 
-@endpoint.route('/convert', methods=['GET'])
+    return cache.get_stock_info_cache(ticker, ttl_hash=cache.get_ttl_hash())
+
+
+@endpoint.route('/price', methods=['POST'])
+def get_price():
+    """
+    Get the most recent price for a stock
+    """
+    # ensure we have a ticker
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
+
+    # get the cached response
+    # we lower the ttl on this because we want the current price to update more
+    # frequently than something like the last 6 months of history
+    return cache.get_price_cache(ticker, ttl_hash=cache.get_ttl_hash(60))
+
+
+@endpoint.route('/convert', methods=['POST'])
 def convert_currency():
+    """ get the conversion rate between two currencies.
+    cache for efficiency
+    """
+    # ensure the inputs are correct
     from_currency = request.args.get("from", "USD")
     to_currency = request.args.get("to", "CAD")
-    if from_currency == to_currency:
-        return jsonify({"rate": 1.0})
-    try:
-        pair = f"{from_currency}{to_currency}=X"
-        ticker = yf.Ticker(pair)
-        rate = ticker.fast_info.get("lastPrice")
-        return jsonify({"rate": rate})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if (not from_currency) or (not to_currency):
+        return jsonify({"error": "both currencies required"}), 400
 
-@endpoint.route('/search', methods=['GET'])
+    return cache.convert_currency_cache(from_currency, to_currency,
+                                        ttl=cache.get_ttl_hash())
+
+
+@endpoint.route('/search/<query>', methods=['POST'])
 def search_ticker():
+    """
+    Gets valid ticker suggestions from some typed search
+    """
     query = request.args.get("q")
     if not query:
         return jsonify([])
-    try:
-        results = yf.Search(query, max_results=5)
-        quotes = results.quotes or []
-        suggestions = [
-            {"ticker": q.get("symbol"), "name": q.get("longname") or q.get("shortname")}
-            for q in quotes
-            if q.get("symbol")
-        ]
-        return jsonify(suggestions)
-    except Exception:
-        return jsonify([])
+
+    # search in cache with no ttl because this shouldnt change
+    # and will be called quite often
+    return cache.search_ticker_cache(query)
 
 if __name__ == '__main__':
     endpoint.run(host='0.0.0.0')
