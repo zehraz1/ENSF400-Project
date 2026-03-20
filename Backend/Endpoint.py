@@ -66,7 +66,7 @@ def convert_currency():
         return jsonify({"error": "both currencies required"}), 400
 
     return cache.convert_currency_cache(from_currency, to_currency,
-                                        ttl=cache.get_ttl_hash())
+                                        ttl_hash=cache.get_ttl_hash())
 
 
 @endpoint.route('/search', methods=['GET'])
