@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 type RiskTolerance = "low" | "medium" | "high";
+type investmentTime = "Short-term" | "Long-term";
 
 type AnalysisResult = {
   summary: string;
@@ -11,31 +12,24 @@ type AnalysisResult = {
   pros: string[];
   cons: string[];
 };
-// temporary - just hard coded for now
-const TICKERS = [
-  { ticker: "AAPL", name: "Apple" },
-  { ticker: "MSFT", name: "Microsoft" },
-  { ticker: "GOOGL", name: "Alphabet (Google)" },
-  { ticker: "AMZN", name: "Amazon" },
-  { ticker: "NVDA", name: "NVIDIA" },
-  { ticker: "TSLA", name: "Tesla" },
-  { ticker: "META", name: "Meta" },
-  { ticker: "BRK.B", name: "Berkshire Hathaway" },
-  { ticker: "JPM", name: "JPMorgan Chase" },
-  { ticker: "V", name: "Visa" },
-  { ticker: "SPY", name: "S&P 500 ETF" },
-  { ticker: "QQQ", name: "Nasdaq 100 ETF" },
-  { ticker: "GLD", name: "Gold ETF" },
-];
 
 export default function Home() {
   const [ticker, setTicker] = useState("AAPL");
-  const [investedAmount, setInvestedAmount] = useState<string>("1000");
-  const [portfolioSize, setPortfolioSize] = useState<string>("10000");
+  const [investedAmount, setInvestedAmount] = useState<string>("0");
+  const [portfolioSize, setPortfolioSize] = useState<string>("100");
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>("medium");
+  const [investmentTime, setInvestmentTime] = useState<investmentTime>("Long-term")
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [currency, setCurrency] = useState<"CAD" | "USD">("CAD");
+  const [shares, setShares] = useState<string>("1");
+  const [stockPrice, setStockPrice] = useState<number | null>(null);
+  const [basePriceUSD, setBasePriceUSD] = useState<number | null>(null); 
+  const [suggestions, setSuggestions] = useState<{ticker: string, name: string}[]>([]);
+  const [confirmedTicker, setConfirmedTicker] = useState("AAPL");
+  const [priceLoading, setPriceLoading] = useState(true);
 
+  // Calculate position size as a percentage of portfolio
   const positionPercentage = useMemo(() => {
     const invested = Number(investedAmount);
     const portfolio = Number(portfolioSize);
@@ -48,11 +42,81 @@ export default function Home() {
     return (invested / portfolio) * 100;
   }, [investedAmount, portfolioSize]);
 
-  const filteredTickers = useMemo(() => {
-    return TICKERS.filter(
-      (t) => t.ticker.includes(ticker) || t.name.toUpperCase().includes(ticker) // match ticker or name
-    ).slice(0, 10); // limit to 10 results in dropdown
+  // Fetch ticker suggestions from backend as user types
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (!ticker || ticker.length < 1) {
+        setSuggestions([]);
+        return;
+      }
+      try {
+        const res = await fetch(`http://localhost:5000/search?q=${ticker}`);
+        const data = await res.json();
+        setSuggestions(data);
+      } catch (e) {
+        setSuggestions([]);
+      }
+    };
+    fetchSuggestions();
   }, [ticker]);
+
+  // Fetch stock price when confirmedTicker changes
+  useEffect(() => {
+    if (!confirmedTicker) return;
+    setPriceLoading(true); // start loading when ticker changes
+    const delay = setTimeout(async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/price?ticker=${confirmedTicker}`);
+        const data = await res.json();
+        if (data.price) {
+          setBasePriceUSD(data.price);
+          setShares("1"); // reset to 1 share when new ticker loads
+          const rateRes = await fetch(`http://localhost:5000/convert?from=USD&to=${currency}`);
+          const rateData = await rateRes.json();
+          if (rateData.rate) {
+            const converted = data.price * rateData.rate;
+            setStockPrice(converted);
+            setInvestedAmount((converted * 1).toFixed(2)); // use 1 directly since shares just reset
+          } else {
+            setStockPrice(data.price);
+            setInvestedAmount((data.price * 1).toFixed(2));
+          }
+        } else {
+          setStockPrice(null);
+          setBasePriceUSD(null);
+          setInvestedAmount("0");
+          setShares("0");
+        }
+      } catch (e) {
+        setStockPrice(null);
+      } finally {
+        setPriceLoading(false); // stop loading when done
+      }
+    }, 500);
+
+    return () => clearTimeout(delay);
+  }, [confirmedTicker]);
+
+
+  // Fetch exchange rate and convert price when currency changes
+  useEffect(() => {
+  if (!basePriceUSD) return;
+  const fetchRate = async () => {
+    try {
+      const res = await fetch(`http://localhost:5000/convert?from=USD&to=${currency}`);
+      const data = await res.json();
+      if (data.rate) {
+        // convert from base USD price
+        const converted = basePriceUSD * data.rate;
+        setStockPrice(converted);
+        setInvestedAmount((converted * Number(shares)).toFixed(2));
+      }
+    } catch (e) {
+      console.error("Failed to fetch exchange rate", e);
+    }
+  };
+  fetchRate();
+}, [currency]);
 
   const handleAnalyze = () => {
     setLoading(true);
@@ -101,8 +165,8 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <div className="mx-auto max-w-3xl px-4 py-10">
+    <main className="min-h-screen bg-zinc-950 text-white lg:h-screen lg:overflow-hidden">
+      <div className="mx-auto max-w-7xl px-4 py-10 h-full flex flex-col lg:h-screen">
         <header className="mb-8">
           <h1 className="text-3xl font-semibold tracking-tight">Stock Advisor</h1>
           <p className="mt-2 text-sm text-zinc-400">
@@ -110,12 +174,11 @@ export default function Home() {
           </p>
         </header>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-[1fr_2fr] flex-1 min-h-0">
 
           {/* Stock Data Inputs */}
-          <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5">
+          <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5 overflow-y-auto self-start">
             <h2 className="text-sm font-medium text-zinc-300">Inputs</h2>
-
             <div className="mt-4 grid gap-4">
 
               {/* Stock Ticker */}
@@ -124,34 +187,94 @@ export default function Home() {
                 <input
                   className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
                   value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())} // force user input to be capitalized
-                  placeholder="e.g. AAPL or Apple"
+                  onChange={(e) => {
+                    const val = e.target.value.toUpperCase();
+                    setTicker(val);
+                    setConfirmedTicker(val);
+                  }}
+                  placeholder="e.g. AAPL"
                   list="ticker-list"
                 />
-                {/* dropdown suggestions from filteredTickers */}
+                {/* dropdown suggestions */}
                 <datalist id="ticker-list">
-                  {filteredTickers.map((t) => (
+                  {(suggestions ?? []).map((t) => (
                     <option key={t.ticker} value={t.ticker}>{t.name}</option>
                   ))}
                 </datalist>
               </label>
 
-              {/* Amount to Invest */}
-              <label className="grid gap-1">
-                <span className="text-xs text-zinc-400">Amount to Invest ($)</span>
-                <input
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-                  value={investedAmount}
-                  onChange={(e) => {
-                    // Regex checks digits
-                    // returns true or false
-                    // only update if input is digits
-                    if (/^\d*$/.test(e.target.value)) setInvestedAmount(e.target.value);
-                  }}
-                  placeholder="1000"
-                />
-              </label>
-              
+              {/* Amount to Invest and Shares*/}
+              <div className="grid gap-1">
+                <div className="flex gap-2">
+                  {/* Shares input */}
+                  <label className="grid gap-1 w-1/2">
+                    <span className="text-xs text-zinc-400">Shares</span>
+                    <input
+                      className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500 w-full"
+                      value={shares}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Regex checks digits and decimals
+                        // returns true or false
+                        // only update if input is digits or decimals
+                        if (/^\d*\.?\d*$/.test(val)) {
+                          setShares(val);
+                          // Update amount based on shares
+                          if (stockPrice) setInvestedAmount((stockPrice * Number(val)).toFixed(2));
+                        }
+                      }}
+                      placeholder="Shares"
+                    />
+                  </label>
+
+                  {/* Amount input */}
+                  <label className="grid gap-1 w-1/2">
+                    <span className="text-xs text-zinc-400">Amount ($)</span>
+                    <input
+                      className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500 w-full"
+                      value={investedAmount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Regex checks digits and decimals
+                        // returns true or false
+                        // only update if input is digits or decimals
+                        if (/^\d*\.?\d*$/.test(val)) {
+                          setInvestedAmount(val);
+                          // Update shares based on amount
+                          if (stockPrice && Number(val) > 0) {
+                            setShares((Number(val) / stockPrice).toFixed(4));
+                          }
+                        }
+                      }}
+                      placeholder="Amount ($)"
+                    />
+                  </label>
+                </div>
+
+                {/* CAD / USD toggle */}
+                <div className="grid gap-1 mt-2">
+                  <span className="text-xs text-zinc-400">Currency</span>
+                  <div className="flex gap-2">
+                    {(["CAD", "USD"] as const).map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => setCurrency(c)}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium border ${
+                          currency === c
+                            ? "bg-white text-zinc-900 border-white"
+                            : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                    <span className="text-xs text-zinc-500 self-center">
+                      {priceLoading ? "Fetching price..." : stockPrice ? `1 share = ${currency} $${stockPrice.toFixed(2)}`: "Price unavailable — enter amount manually"}
+                    </span>
+                  </div>
+                </div>
+              </div>   
+
               {/* Position size - editable */}
               <label className="grid gap-1">
                 <span className="text-xs text-zinc-400">Portfolio Size ($)</span>
@@ -190,6 +313,19 @@ export default function Home() {
                 </select>
               </label>
 
+              {/* Time to Invest */}
+              <label className="grid gap-1">
+                <span className="text-xs text-zinc-400">Investment Time Period</span>
+                <select
+                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                  value={investmentTime}
+                  onChange={(e) => setInvestmentTime(e.target.value as investmentTime)}
+                >
+                  <option value="Short-term">Short-term</option>
+                  <option value="Long-term">Long-term</option>
+                </select>
+              </label>
+
               {/* Analyze Button */}
               <button 
                 onClick={handleAnalyze}
@@ -202,9 +338,9 @@ export default function Home() {
           </section>
 
           {/* Results */}
-          <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5">
+          <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5 overflow-y-auto self-start">
             <h2 className="text-sm font-medium text-zinc-300">Results</h2>
-            <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-sm">
+            <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-sm h-[calc(100%-2rem)]">
               {loading ? (
                 <div className="text-zinc-400">Loading analysis...</div>
               ) : result ? (

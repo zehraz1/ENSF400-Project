@@ -1,5 +1,7 @@
 # app.py
 from flask import Flask, request, jsonify
+from flask_cors import CORS
+import yfinance as yf
 from StockDataCollector import yf_aggregator
 from LLMHandler import generate_summary
 from functools import lru_cache
@@ -8,7 +10,7 @@ import time
 import threading
 
 endpoint = Flask(__name__)
-
+CORS(endpoint)
 
 @lru_cache(maxsize=32)
 def get_stock_info_cache(ticker, ttl_hash=None) -> Dict[str, Any]:
@@ -73,6 +75,51 @@ def get_stock_info():
     #                   "stock_history": list(dict(date, price))})
     return jsonify(data)
 
+@endpoint.route('/price', methods=['GET'])
+def get_price():
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
+    agg = yf_aggregator(ticker)
+    if not agg.is_valid_ticker():
+        return jsonify({"error": "invalid ticker"}), 404
+    info = agg._get_company_info()
+    return jsonify({
+        "ticker": ticker,
+        "price": info.get("currentPrice"),
+        "currency": info.get("currency"),
+    })
+
+@endpoint.route('/convert', methods=['GET'])
+def convert_currency():
+    from_currency = request.args.get("from", "USD")
+    to_currency = request.args.get("to", "CAD")
+    if from_currency == to_currency:
+        return jsonify({"rate": 1.0})
+    try:
+        pair = f"{from_currency}{to_currency}=X"
+        ticker = yf.Ticker(pair)
+        rate = ticker.fast_info.get("lastPrice")
+        return jsonify({"rate": rate})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@endpoint.route('/search', methods=['GET'])
+def search_ticker():
+    query = request.args.get("q")
+    if not query:
+        return jsonify([])
+    try:
+        results = yf.Search(query, max_results=5)
+        quotes = results.quotes or []
+        suggestions = [
+            {"ticker": q.get("symbol"), "name": q.get("longname") or q.get("shortname")}
+            for q in quotes
+            if q.get("symbol")
+        ]
+        return jsonify(suggestions)
+    except Exception:
+        return jsonify([])
 
 if __name__ == '__main__':
     endpoint.run(host='0.0.0.0')
