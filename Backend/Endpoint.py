@@ -13,15 +13,15 @@ endpoint = Flask(__name__)
 CORS(endpoint)
 
 @lru_cache(maxsize=32)
-def get_stock_info_cache(ticker, ttl_hash=None) -> Dict[str, Any]:
+def get_stock_info_cache(ticker, period="1mo", ttl_hash=None) -> Dict[str, Any]:
     stock = yf_aggregator(ticker)
 
     if not stock.is_valid_ticker():
         return None
 
     news = stock.get_news_data()
-    company_name = stock.get_company_info()["shortName"]
-    stock_history = stock.get_price_history()
+    company_name = stock._get_company_info()["shortName"]
+    stock_history = stock._get_price_history(period=period)
 
     # create a temporary thread to cache the get_advice
     # test this to see if it actually helps performance (this will use too many tokens
@@ -29,7 +29,7 @@ def get_stock_info_cache(ticker, ttl_hash=None) -> Dict[str, Any]:
     # temp_thread = threading.Thread(target=get_advice_cache, args=(ticker, ttl_hash))
     # temp_thread.start()
 
-    return {"company_name": company_name, \
+    return {"company_name": company_name,
             "stock_history": stock_history, "news": news}
 
 
@@ -53,7 +53,7 @@ def get_ttl_hash(seconds=86400) -> int: # default ttl to one day
 
 @endpoint.route('/', methods=['POST'])
 def get_advice():
-    request_data = request.json()
+    request_data = request.get_json()
 
     ticker = request_data.get("ticker")
 
@@ -65,14 +65,11 @@ def get_advice():
 
 @endpoint.route('/get_graphs_news', methods=['POST'])
 def get_stock_info():
-    request_data = request.json()
-
+    request_data = request.get_json()
     ticker = request_data.get("ticker")
+    period = request_data.get("period", "1mo") # default to 1 month
 
-    data = get_stock_info_cache(ticker, ttl_hash=get_ttl_hash())
-
-    # return jsonify({"valid": bool, "company_name": string, \
-    #                   "stock_history": list(dict(date, price))})
+    data = get_stock_info_cache(ticker, period, ttl_hash=get_ttl_hash())
     return jsonify(data)
 
 @endpoint.route('/price', methods=['GET'])

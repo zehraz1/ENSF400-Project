@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 type RiskTolerance = "low" | "medium" | "high";
 type investmentTime = "Short-term" | "Long-term";
@@ -12,6 +13,15 @@ type AnalysisResult = {
   pros: string[];
   cons: string[];
 };
+
+type StockHistoryItem = {
+    date: string;
+    close: number;
+    open: number;
+    high: number;
+    low: number;
+    volume: number;
+  };
 
 export default function Home() {
   const [ticker, setTicker] = useState("AAPL");
@@ -28,6 +38,8 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState<{ticker: string, name: string}[]>([]);
   const [confirmedTicker, setConfirmedTicker] = useState("AAPL");
   const [priceLoading, setPriceLoading] = useState(true);
+  const [chartData, setChartData] = useState<{date: string, price: number}[]>([]);
+  const [chartPeriod, setChartPeriod] = useState<string>("1mo");
 
   // Calculate position size as a percentage of portfolio
   const positionPercentage = useMemo(() => {
@@ -95,7 +107,7 @@ export default function Home() {
     }, 500);
 
     return () => clearTimeout(delay);
-  }, [confirmedTicker]);
+}, [confirmedTicker]);
 
 
   // Fetch exchange rate and convert price when currency changes
@@ -117,6 +129,31 @@ export default function Home() {
   };
   fetchRate();
 }, [currency]);
+
+  // Fetch stock history for chart when confirmedTicker changes
+  useEffect(() => {
+    if (!confirmedTicker) return;
+    const fetchChartData = async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/get_graphs_news`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticker: confirmedTicker, period: chartPeriod }),
+        });
+        const data = await res.json();
+        if (data.stock_history) {
+          const formatted = data.stock_history.map((d: StockHistoryItem) => ({
+            date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            price: parseFloat(d.close.toFixed(2)),
+          }));
+          setChartData(formatted);
+        }
+      } catch (e) {
+        setChartData([]);
+      }
+    };
+    fetchChartData();
+}, [confirmedTicker, chartPeriod]);
 
   const handleAnalyze = () => {
     setLoading(true);
@@ -340,6 +377,51 @@ export default function Home() {
           {/* Results */}
           <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5 overflow-y-auto self-start">
             <h2 className="text-sm font-medium text-zinc-300">Results</h2>
+
+            {/* Chart period selector */}
+            {chartData.length > 0 && stockPrice !== null && (
+              <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+                <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-xs text-zinc-400">{confirmedTicker} — Price History</h3>
+                  {/* Period toggle buttons */}
+                  <div className="flex gap-1 flex-wrap">
+                   {[
+                      { label: "1W", value: "5d" },
+                      { label: "1M", value: "1mo" },
+                      { label: "6M", value: "6mo" },
+                      { label: "1Y", value: "1y" },
+                      { label: "ALL", value: "max" },
+                    ].map((p) => (
+                      <button
+                        key={p.value}
+                        onClick={() => setChartPeriod(p.value)}
+                        className={`px-2 py-1 rounded text-xs font-medium border ${
+                          chartPeriod === p.value
+                            ? "bg-white text-zinc-900 border-white"
+                            : "bg-zinc-900 text-zinc-400 border-zinc-700"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} domain={["auto", "auto"]} width={35} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px" }}
+                      labelStyle={{ color: "#a1a1aa" }}
+                      itemStyle={{ color: "#ffffff" }}
+                    />
+                    <Line type="monotone" dataKey="price" stroke="#ffffff" strokeWidth={1.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Analysis results */}
             <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-sm h-[calc(100%-2rem)]">
               {loading ? (
                 <div className="text-zinc-400">Loading analysis...</div>
@@ -349,24 +431,21 @@ export default function Home() {
                     <h3 className="font-medium text-white">Summary</h3>
                     <p className="text-zinc-300">{result.summary}</p>
                   </div>
-                  
                   <div>
                     <h3 className="font-medium text-white">Advice</h3>
                     <p className="text-zinc-300">{result.advice}</p>
                   </div>
-                  
                   <div>
-                    <h3 className="font-medium text-white">Risk Level: 
+                    <h3 className="font-medium text-white">Risk Level:
                       <span className={`ml-2 ${
-                        result.riskLevel === "Low" ? "text-green-400" : 
-                        result.riskLevel === "Medium" ? "text-yellow-400" : 
+                        result.riskLevel === "Low" ? "text-green-400" :
+                        result.riskLevel === "Medium" ? "text-yellow-400" :
                         "text-red-400"
                       }`}>
                         {result.riskLevel}
                       </span>
                     </h3>
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <h4 className="font-medium text-green-400">Pros</h4>
