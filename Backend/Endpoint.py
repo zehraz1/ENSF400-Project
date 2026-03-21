@@ -11,7 +11,6 @@ import StockDataCache as cache
 endpoint = Flask(__name__)
 CORS(endpoint)
 
-
 @endpoint.route('/', methods=['POST'])
 def get_advice():
     """Get stock advice in the form
@@ -45,10 +44,12 @@ def get_stock_info():
     and cache for efficiency
     """
     ticker = request.args.get("ticker")
+    period = request.args.get("period", "1mo")
+
     if not ticker:
         return jsonify({"error": "ticker is required"}), 400
 
-    return cache.get_stock_info_cache(ticker, ttl_hash=cache.get_ttl_hash())
+    return cache.get_stock_info_cache(ticker, period, ttl_hash=cache.get_ttl_hash())
 
 
 @endpoint.route('/price', methods=['GET'])

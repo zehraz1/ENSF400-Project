@@ -54,7 +54,7 @@ def get_price_cache(ticker, ttl_hash=None):
 
 
 @lru_cache(maxsize=32)
-def get_stock_info_cache(ticker, ttl_hash=None):
+def get_stock_info_cache(ticker, period="1mo", ttl_hash=None):
     stock = yf_aggregator(ticker)
 
     if not stock.is_valid_ticker():
@@ -62,11 +62,10 @@ def get_stock_info_cache(ticker, ttl_hash=None):
 
     try:
         news = stock.get_news_data()
-        company_name = stock.get_company_info()["shortName"]
-        stock_history = stock.get_price_history()
+        company_name = stock._get_company_info()["shortName"]
+        stock_history = stock._get_price_history(period=period)
 
-        return jsonify({"company_name": company_name, \
-                "stock_history": stock_history, "news": news})
+        return jsonify({"company_name": company_name, "stock_history": stock_history, "news": news})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -105,7 +104,7 @@ def get_advice_cache(ticker, invested_amnt,
         recommendation = rec_engine.generate_recommendation(
                 llm_result, risk_result, invested_amnt,
                 portfolio_size, user_risk)
-                
+
         print("Output:", recommendation)
         # return {"summary": string, "advice": string}
         return jsonify(recommendation)
