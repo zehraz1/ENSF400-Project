@@ -18,7 +18,7 @@ export default function Home() {
   const [investedAmount, setInvestedAmount] = useState<string>("0");
   const [portfolioSize, setPortfolioSize] = useState<string>("100");
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>("medium");
-  const [investmentTime, setInvestmentTime] = useState<investmentTime>("Long-term")
+  const [investmentTime, setInvestmentTime] = useState<investmentTime>("Long-term");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [currency, setCurrency] = useState<"CAD" | "USD">("CAD");
@@ -53,7 +53,7 @@ export default function Home() {
         const res = await fetch(`http://localhost:5000/search?q=${ticker}`);
         const data = await res.json();
         setSuggestions(data);
-      } catch (e) {
+      } catch {
         setSuggestions([]);
       }
     };
@@ -64,6 +64,7 @@ export default function Home() {
   useEffect(() => {
     if (!confirmedTicker) return;
     setPriceLoading(true); // start loading when ticker changes
+    setResult(null); // clear previous analysis when ticker changes
     const delay = setTimeout(async () => {
       try {
         const res = await fetch(`http://localhost:5000/price?ticker=${confirmedTicker}`);
@@ -87,7 +88,7 @@ export default function Home() {
           setInvestedAmount("0");
           setShares("0");
         }
-      } catch (e) {
+      } catch {
         setStockPrice(null);
       } finally {
         setPriceLoading(false); // stop loading when done
@@ -95,7 +96,7 @@ export default function Home() {
     }, 500);
 
     return () => clearTimeout(delay);
-  }, [confirmedTicker]);
+  }, [confirmedTicker, currency]);
 
 
   // Fetch exchange rate and convert price when currency changes
@@ -116,52 +117,37 @@ export default function Home() {
     }
   };
   fetchRate();
-}, [currency]);
+}, [currency, basePriceUSD, shares]);
 
-  const handleAnalyze = () => {
+  // Send user inputs to the backend and display the AI-generated recommendation
+  const handleAnalyze = async () => {
     setLoading(true);
-    
-    // Simulate API call with timeout
-    setTimeout(() => {
-      // Mock data based on which ticker is selected
-      const mockResults: {
-  [key: string]: AnalysisResult
-} = {
-        AAPL: {
-          summary: "Apple Inc. shows strong performance with recent product launches. Revenue grew 5% in Q1 2024 with services segment reaching all-time high. iPhone sales remain stable despite market competition.",
-          advice: `Based on your $${investedAmount} investment and ${riskTolerance} risk tolerance, consider dollar-cost averaging into this position over 3 months.`,
-          riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High",
-          pros: ["Strong brand loyalty", "Growing services revenue", "Healthy cash reserves"],
-          cons: ["Market saturation", "Regulatory challenges", "Supply chain dependencies"]
-        },
-        MSFT: {
-          summary: "Microsoft continues to dominate cloud computing with Azure growth of 20%. AI integration across products is driving new revenue streams. Strong enterprise relationships provide stability.",
-          advice: `With your $${investedAmount} portfolio and ${riskTolerance} tolerance, Microsoft offers balanced growth potential.`,
-          riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "Medium",
-          pros: ["Cloud leadership", "AI innovation", "Recurring revenue"],
-          cons: ["High valuation", "Regulatory scrutiny", "Competition from AWS"]
-        },
-        NVDA: {
-          summary: "NVIDIA is the undisputed leader in AI chips with 80% market share. Data center revenue doubled year-over-year. New product launches continue to push performance boundaries.",
-          advice: `$${investedAmount} in NVIDIA aligns with your ${riskTolerance} profile, but consider the high volatility.`,
-          riskLevel: "High",
-          pros: ["AI market leader", "Strong growth", "High margins"],
-          cons: ["Very volatile", "High valuation", "Competition increasing"]
-        }
-      };
+    setResult(null);
+    try {
+      const params = new URLSearchParams({
+        ticker: confirmedTicker,
+        invested_amount: investedAmount,
+        portfolio_size: portfolioSize,
+        user_risk: riskTolerance,
+      });
+      const res = await fetch(`http://localhost:5000/?${params}`, { method: "POST" });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
 
-      // Use mock data for the selected ticker, or a default if not found
-      const selectedResult = mockResults[ticker] || {
-        summary: `${ticker} is showing mixed signals in recent trading. Consider monitoring closely before making decisions.`,
-        advice: `With $${investedAmount} at ${riskTolerance} risk, diversify across sectors to reduce exposure.`,
-        riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High",
-        pros: ["Liquid stock", "Market presence", "Analyst coverage"],
-        cons: ["Recent volatility", "Earnings soon", "Sector headwinds"]
-      };
-      
-      setResult(selectedResult);
+      setResult({
+        summary: data.message,
+        advice: data.confidenceNote,
+        riskLevel: data.userRiskTolerance === "low" ? "Low"
+          : data.userRiskTolerance === "high" ? "High"
+          : "Medium",
+        pros: [], 
+        cons: [],
+      });
+    } catch (e) {
+      console.error("Analysis failed", e);
+    } finally {
       setLoading(false);
-    }, 2000); // 2 second delay to simulate loading
+    }
   };
 
   return (

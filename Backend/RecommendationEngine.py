@@ -185,4 +185,6 @@ class RecommendationEngine:
             "investedAmount": invested_amount,
             "portfolioSize": portfolio_size,
             "userRiskTolerance": user_risk,
+            "pros": pros,
+            "cons": cons, 
         }

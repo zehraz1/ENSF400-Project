@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import yfinance as yf
 from StockDataCollector import yf_aggregator
-from LLMHandler import generate_summary
+import LLMHandler
 from functools import lru_cache
 import time
 import StockDataCache as cache

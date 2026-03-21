@@ -90,23 +90,23 @@ def get_advice_cache(ticker, invested_amnt,
         news = stock.get_news_data()
         risk_metrics = stock.get_risk_metrics()
 
-        llmh = LLMHandler()
+        llmh = LLMHandler.LLMHandler()
         llm_result = llmh.generate_summary_with_timeout(
                 fin,
                 news,
                 user_risk,
                 )
 
-        risk_engine = RiskEngine()
+        risk_engine = RiskEngine.RiskEngine()
         risk_result = risk_engine.evaluate(
                 risk_metrics, invested_amnt, portfolio_size, user_risk)
 
-        rec_engine = RecommendationEngine()
+        rec_engine = RecommendationEngine.RecommendationEngine()
         recommendation = rec_engine.generate_recommendation(
                 llm_result, risk_result, invested_amnt,
                 portfolio_size, user_risk)
-
-        print("Output: " + recommendation)
+                
+        print("Output:", recommendation)
         # return {"summary": string, "advice": string}
         return jsonify(recommendation)
     except Exception as e:
