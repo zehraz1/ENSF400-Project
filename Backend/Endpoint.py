@@ -15,14 +15,27 @@ CORS(endpoint)
 @endpoint.route('/', methods=['POST'])
 def get_advice():
     """Get stock advice in the form
-    {"pros": ..., "cons": ..., "summary": ...}
+        {   "label": label,
+            "message": message,
+            "confidenceNote": confidence_note,
+            "investedAmount": invested_amount,
+            "portfolioSize": portfolio_size,
+            "userRiskTolerance": user_risk  }
     and cache for efficiency
     """
     ticker = request.args.get("ticker")
-    if not ticker:
-        return jsonify({"error": "ticker is required"}), 400
+    invested_amnt = request.args.get("invested_amount")
+    portfolio = request.args.get("portfolio_size")
+    user_risk = request.args.get("user_risk", "medium")
+    if (not ticker) or (not invested_amnt) or (not portfolio):
+        return jsonify({"error": "missing a required field"}), 400
 
-    return cache.get_advice_cache(ticker, ttl_hash=cache.get_ttl_hash())
+    advice = cache.get_advice_cache(
+            ticker, invested_amnt, portfolio,
+            user_risk, ttl_hash=cache.get_ttl_hash())
+
+    print(advice)
+    return(advice)
 
 
 @endpoint.route('/get_graphs_news', methods=['POST'])
