@@ -1,33 +1,86 @@
 # app.py
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import yfinance as yf
 from StockDataCollector import yf_aggregator
 from LLMHandler import generate_summary
+from functools import lru_cache
+import time
+import StockDataCache as cache
 
 endpoint = Flask(__name__)
+CORS(endpoint)
 
 
 @endpoint.route('/', methods=['POST'])
-def hello():
-    request_data = request.get_json()
+def get_advice():
+    """Get stock advice in the form
+    {"pros": ..., "cons": ..., "summary": ...}
+    and cache for efficiency
+    """
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
 
-    #not sure how we are getting the data from the front end for now
-    ticker = request_data.get("ticker")
+    return cache.get_advice_cache(ticker, ttl_hash=cache.get_ttl_hash())
 
-    agg = yf_aggregator(ticker)
 
-    # get context from yfinance news and general api functions
-    fin = agg.get_fin_data()
-    news = agg.get_news_data()
+@endpoint.route('/get_graphs_news', methods=['POST'])
+def get_stock_info():
+    """Get stock info in the form
+    {"company name" ..., "stock history" ..., "news": ...}
+    and cache for efficiency
+    """
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
 
-    # send context to gemini handler
+    return cache.get_stock_info_cache(ticker, ttl_hash=cache.get_ttl_hash())
 
-    # get output from gemini handler
-    summary = generate_summary(fin, news)
 
-    # return jsonified output
-    return jsonify({"ticker": ticker, "summary": summary})
+@endpoint.route('/price', methods=['GET'])
+def get_price():
+    """
+    Get the most recent price for a stock
+    """
+    # ensure we have a ticker
+    ticker = request.args.get("ticker")
+    if not ticker:
+        return jsonify({"error": "ticker is required"}), 400
 
+    # get the cached response
+    # we lower the ttl on this because we want the current price to update more
+    # frequently than something like the last 6 months of history
+    return cache.get_price_cache(ticker, ttl_hash=cache.get_ttl_hash(60))
+
+
+@endpoint.route('/convert', methods=['GET'])
+def convert_currency():
+    """ get the conversion rate between two currencies.
+    cache for efficiency
+    """
+    # ensure the inputs are correct
+    from_currency = request.args.get("from", "USD")
+    to_currency = request.args.get("to", "CAD")
+    if (not from_currency) or (not to_currency):
+        return jsonify({"error": "both currencies required"}), 400
+
+    return cache.convert_currency_cache(from_currency, to_currency,
+                                        ttl_hash=cache.get_ttl_hash())
+
+
+@endpoint.route('/search', methods=['GET'])
+def search_ticker():
+    """
+    Gets valid ticker suggestions from some typed search
+    """
+    query = request.args.get("q")
+    if not query:
+        return jsonify([])
+
+    # search in cache with no ttl because this shouldnt change
+    # and will be called quite often
+    return cache.search_ticker_cache(query)
 
 if __name__ == '__main__':
-    endpoint.run(host='0.0.0.0')
+    endpoint.run()
