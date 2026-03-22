@@ -3,6 +3,9 @@ from functools import lru_cache
 import time
 from flask import jsonify
 import yfinance as yf
+import RecommendationEngine
+import RiskEngine
+import LLMHandler
 
 
 @lru_cache(maxsize=128)
@@ -51,7 +54,7 @@ def get_price_cache(ticker, ttl_hash=None):
 
 
 @lru_cache(maxsize=32)
-def get_stock_info_cache(ticker, ttl_hash=None):
+def get_stock_info_cache(ticker, period="1mo", ttl_hash=None):
     stock = yf_aggregator(ticker)
 
     if not stock.is_valid_ticker():
@@ -59,21 +62,55 @@ def get_stock_info_cache(ticker, ttl_hash=None):
 
     try:
         news = stock.get_news_data()
-        company_name = stock.get_company_info()["shortName"]
-        stock_history = stock.get_price_history()
+        company_name = stock._get_company_info()["shortName"]
+        stock_history = stock._get_price_history(period=period)
 
-        return jsonify({"company_name": company_name, \
-                "stock_history": stock_history, "news": news})
+        return jsonify({"company_name": company_name, "stock_history": stock_history, "news": news})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@lru_cache(maxsize=32)
-def get_advice_cache(ticker, ttl_hash=None):
-    # this will change with the implementation of the LLM
+@lru_cache(maxsize=256)
+def get_advice_cache(ticker, invested_amnt,
+                     portfolio_size, user_risk, ttl_hash=None):
+    """Given several user inputs, validate them all and 
+        generate a recommendation, caching it for efficiency.
+        Create a rather large cache because there are several
+        metrics that are changeable
+    """
+    stock = yf_aggregator(ticker)
 
-    # return {"summary": string, "advice": string}
-    pass
+    if not stock.is_valid_ticker():
+        return jsonify({"error": "invalid ticker"}), 400
+
+    try:
+        # need fin, news, risk metrics
+        fin = stock.get_fin_data()
+        news = stock.get_news_data()
+        risk_metrics = stock.get_risk_metrics()
+
+        llmh = LLMHandler.LLMHandler()
+        llm_result = llmh.generate_summary_with_timeout(
+                fin,
+                news,
+                user_risk,
+                )
+
+        risk_engine = RiskEngine.RiskEngine()
+        risk_result = risk_engine.evaluate(
+                risk_metrics, invested_amnt, portfolio_size, user_risk)
+
+        rec_engine = RecommendationEngine.RecommendationEngine()
+        recommendation = rec_engine.generate_recommendation(
+                llm_result, risk_result, invested_amnt,
+                portfolio_size, user_risk)
+
+        print("Output:", recommendation)
+        # return {"summary": string, "advice": string}
+        return jsonify(recommendation)
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 500
 
 
 def get_ttl_hash(seconds=86400) -> int: # default ttl to one day

@@ -1,41 +1,50 @@
 # app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import yfinance as yf
-from StockDataCollector import yf_aggregator
-from LLMHandler import generate_summary
-from functools import lru_cache
-import time
 import StockDataCache as cache
 
 endpoint = Flask(__name__)
-CORS(endpoint)
+CORS(endpoint, resources={r"/*": {"origins": "http://localhost:3000"}})
 
-
-@endpoint.route('/', methods=['POST'])
+@endpoint.route('/', methods=['GET'])
 def get_advice():
     """Get stock advice in the form
-    {"pros": ..., "cons": ..., "summary": ...}
+        {   "label": label,
+            "message": message,
+            "confidenceNote": confidence_note,
+            "investedAmount": invested_amount,
+            "portfolioSize": portfolio_size,
+            "userRiskTolerance": user_risk  }
     and cache for efficiency
     """
     ticker = request.args.get("ticker")
-    if not ticker:
-        return jsonify({"error": "ticker is required"}), 400
+    invested_amnt = request.args.get("invested_amount")
+    portfolio = request.args.get("portfolio_size")
+    user_risk = request.args.get("user_risk", "medium")
+    if (not ticker) or (not invested_amnt) or (not portfolio):
+        return jsonify({"error": "missing a required field"}), 400
 
-    return cache.get_advice_cache(ticker, ttl_hash=cache.get_ttl_hash())
+    advice = cache.get_advice_cache(
+            ticker, invested_amnt, portfolio,
+            user_risk, ttl_hash=cache.get_ttl_hash())
+
+    print(advice)
+    return(advice)
 
 
-@endpoint.route('/get_graphs_news', methods=['POST'])
+@endpoint.route('/get_graphs_news', methods=['GET'])
 def get_stock_info():
     """Get stock info in the form
     {"company name" ..., "stock history" ..., "news": ...}
     and cache for efficiency
     """
     ticker = request.args.get("ticker")
+    period = request.args.get("period", "1mo")
+
     if not ticker:
         return jsonify({"error": "ticker is required"}), 400
 
-    return cache.get_stock_info_cache(ticker, ttl_hash=cache.get_ttl_hash())
+    return cache.get_stock_info_cache(ticker, period, ttl_hash=cache.get_ttl_hash())
 
 
 @endpoint.route('/price', methods=['GET'])
@@ -82,5 +91,6 @@ def search_ticker():
     # and will be called quite often
     return cache.search_ticker_cache(query)
 
+
 if __name__ == '__main__':
-    endpoint.run()
+    endpoint.run(host='0.0.0.0')
