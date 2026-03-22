@@ -171,7 +171,6 @@ export default function Home() {
       });
       const res = await fetch(`http://localhost:5000/?${params}`, { method: "POST" });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
 
       setResult({
         summary: data.message,
@@ -367,7 +366,7 @@ export default function Home() {
             <h2 className="text-sm font-medium text-zinc-300">Results</h2>
 
             {/* Chart period selector */}
-            {chartData.length > 0 && stockPrice !== null && (
+            {chartData.length > 0 && stockPrice !== null ? (
               <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4">
                 <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-xs text-zinc-400">{confirmedTicker} — Price History</h3>
@@ -406,6 +405,10 @@ export default function Home() {
                     <Line type="monotone" dataKey="price" stroke="#ffffff" strokeWidth={1.5} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-sm h-[calc(100%-2rem)] text-zinc-400">
+                Graph cannot be displayed for this stock.
               </div>
             )}
 
