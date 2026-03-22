@@ -6,7 +6,8 @@ import StockDataCache as cache
 endpoint = Flask(__name__)
 CORS(endpoint, resources={r"/*": {"origins": "http://localhost:3000"}})
 
-@endpoint.route('/', methods=['GET'])
+
+@endpoint.route('/', methods=['GET', 'POST'])
 def get_advice():
     """Get stock advice in the form
         {   "label": label,
@@ -32,7 +33,7 @@ def get_advice():
     return(advice)
 
 
-@endpoint.route('/get_graphs_news', methods=['GET'])
+@endpoint.route('/get_graphs_news', methods=['GET', 'POST'])
 def get_stock_info():
     """Get stock info in the form
     {"company name" ..., "stock history" ..., "news": ...}
