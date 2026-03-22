@@ -138,7 +138,7 @@ export default function Home() {
     const fetchChartData = async () => {
       try {
         const res = await fetch(
-          `http://localhost:5000/get_graphs_news?ticker=${confirmedTicker}&period=${chartPeriod}`,
+          `http://localhost:5001/get_graphs_news?ticker=${confirmedTicker}&period=${chartPeriod}`,
           { method: "POST" }
         );
         const data = await res.json();
@@ -169,7 +169,7 @@ export default function Home() {
         portfolio_size: portfolioSize,
         user_risk: riskTolerance,
       });
-      const res = await fetch(`http://localhost:5000/?${params}`, { method: "POST" });
+      const res = await fetch(`http://localhost:5001/?${params}`, { method: "POST" });
       const data = await res.json();
 
       setResult({
