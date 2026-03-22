@@ -77,42 +77,33 @@ class RecommendationEngine:
         """
         position_comment = self._get_position_comment(position_percentage)
 
-        pros_text = ", ".join(pros[:2]) if pros else "there are no clear positives yet"
-        cons_text = ", ".join(cons[:2]) if cons else "there are no clear concerns yet"
-
         if label == "Be Careful":
             return (
                 f"This stock may be riskier than what you are comfortable with. "
                 f"{position_comment} "
-                f"Some good signs are: {pros_text}. "
-                f"Things to watch out for are: {cons_text}. "
-                f"Overall: {summary}"
+                f"{summary}"
             )
 
         if label == "Take a Closer Look":
             return (
                 f"This stock may be worth looking into more before making a decision. "
                 f"{position_comment} "
-                f"Some good signs are: {pros_text}. "
-                f"Some possible concerns are: {cons_text}. "
-                f"Overall: {summary}"
+                f"{summary}"
             )
 
         if label == "Looks Reasonable":
             return (
                 f"This stock seems to match your selected risk level fairly well. "
                 f"{position_comment} "
-                f"Some good signs are: {pros_text}. "
-                f"Some possible concerns are: {cons_text}. "
-                f"Overall: {summary}"
+                f"{summary}"
             )
 
         return (
             f"There is not enough information right now to give a clear recommendation. "
             f"{position_comment} "
-            f"Overall: {summary}"
+            f"{summary}"
         )
-
+        
     def _build_confidence_note(
         self,
         summary_error: Any,

@@ -78,6 +78,8 @@ def get_advice_cache(ticker, invested_amnt,
         Create a rather large cache because there are several
         metrics that are changeable
     """
+    get_advice_cache.cache_clear()
+    print(f"CACHE MISS - running analysis for {ticker}") 
     stock = yf_aggregator(ticker)
 
     if not stock.is_valid_ticker():

@@ -25,6 +25,7 @@ def get_advice():
     if (not ticker) or (not invested_amnt) or (not portfolio):
         return jsonify({"error": "missing a required field"}), 400
 
+    cache.get_advice_cache.cache_clear() 
     advice = cache.get_advice_cache(
             ticker, invested_amnt, portfolio,
             user_risk, ttl_hash=cache.get_ttl_hash())
