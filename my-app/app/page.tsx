@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 type RiskTolerance = "low" | "medium" | "high";
 type investmentTime = "Short-term" | "Long-term";
@@ -13,12 +14,21 @@ type AnalysisResult = {
   cons: string[];
 };
 
+type StockHistoryItem = {
+    date: string;
+    close: number;
+    open: number;
+    high: number;
+    low: number;
+    volume: number;
+  };
+
 export default function Home() {
   const [ticker, setTicker] = useState("AAPL");
   const [investedAmount, setInvestedAmount] = useState<string>("0");
   const [portfolioSize, setPortfolioSize] = useState<string>("100");
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>("medium");
-  const [investmentTime, setInvestmentTime] = useState<investmentTime>("Long-term")
+  const [investmentTime, setInvestmentTime] = useState<investmentTime>("Long-term");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [currency, setCurrency] = useState<"CAD" | "USD">("CAD");
@@ -28,6 +38,8 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState<{ticker: string, name: string}[]>([]);
   const [confirmedTicker, setConfirmedTicker] = useState("AAPL");
   const [priceLoading, setPriceLoading] = useState(true);
+  const [chartData, setChartData] = useState<{date: string, price: number}[]>([]);
+  const [chartPeriod, setChartPeriod] = useState<string>("1mo");
 
   // Calculate position size as a percentage of portfolio
   const positionPercentage = useMemo(() => {
@@ -53,7 +65,7 @@ export default function Home() {
         const res = await fetch(`http://127.0.0.1:5001/search?q=${ticker}`);
         const data = await res.json();
         setSuggestions(data);
-      } catch (e) {
+      } catch {
         setSuggestions([]);
       }
     };
@@ -64,6 +76,7 @@ export default function Home() {
   useEffect(() => {
     if (!confirmedTicker) return;
     setPriceLoading(true); // start loading when ticker changes
+    setResult(null); // clear previous analysis when ticker changes
     const delay = setTimeout(async () => {
       try {
         const res = await fetch(`http://127.0.0.1:5001/price?ticker=${confirmedTicker}`);
@@ -87,7 +100,7 @@ export default function Home() {
           setInvestedAmount("0");
           setShares("0");
         }
-      } catch (e) {
+      } catch {
         setStockPrice(null);
       } finally {
         setPriceLoading(false); // stop loading when done
@@ -95,7 +108,7 @@ export default function Home() {
     }, 500);
 
     return () => clearTimeout(delay);
-  }, [confirmedTicker]);
+  }, [confirmedTicker, currency]);
 
 
   // Fetch exchange rate and convert price when currency changes
@@ -116,52 +129,63 @@ export default function Home() {
     }
   };
   fetchRate();
-}, [currency]);
+}, [currency, basePriceUSD, shares]);
 
-  const handleAnalyze = () => {
-    setLoading(true);
-    
-    // Simulate API call with timeout
-    setTimeout(() => {
-      // Mock data based on which ticker is selected
-      const mockResults: {
-  [key: string]: AnalysisResult
-} = {
-        AAPL: {
-          summary: "Apple Inc. shows strong performance with recent product launches. Revenue grew 5% in Q1 2024 with services segment reaching all-time high. iPhone sales remain stable despite market competition.",
-          advice: `Based on your $${investedAmount} investment and ${riskTolerance} risk tolerance, consider dollar-cost averaging into this position over 3 months.`,
-          riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High",
-          pros: ["Strong brand loyalty", "Growing services revenue", "Healthy cash reserves"],
-          cons: ["Market saturation", "Regulatory challenges", "Supply chain dependencies"]
-        },
-        MSFT: {
-          summary: "Microsoft continues to dominate cloud computing with Azure growth of 20%. AI integration across products is driving new revenue streams. Strong enterprise relationships provide stability.",
-          advice: `With your $${investedAmount} portfolio and ${riskTolerance} tolerance, Microsoft offers balanced growth potential.`,
-          riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "Medium",
-          pros: ["Cloud leadership", "AI innovation", "Recurring revenue"],
-          cons: ["High valuation", "Regulatory scrutiny", "Competition from AWS"]
-        },
-        NVDA: {
-          summary: "NVIDIA is the undisputed leader in AI chips with 80% market share. Data center revenue doubled year-over-year. New product launches continue to push performance boundaries.",
-          advice: `$${investedAmount} in NVIDIA aligns with your ${riskTolerance} profile, but consider the high volatility.`,
-          riskLevel: "High",
-          pros: ["AI market leader", "Strong growth", "High margins"],
-          cons: ["Very volatile", "High valuation", "Competition increasing"]
+  // Fetch stock history for chart when confirmedTicker changes
+  useEffect(() => {
+    if (!confirmedTicker) return;
+
+    const fetchChartData = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:5000/get_graphs_news?ticker=${confirmedTicker}&period=${chartPeriod}`,
+          { method: "POST" }
+        );
+        const data = await res.json();
+
+        if (data.stock_history) {
+          setChartData(data.stock_history.map((d: StockHistoryItem) => ({
+            date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            price: parseFloat(d.close.toFixed(2)),
+          })));
         }
-      };
+      } catch {
+        setChartData([]);
+      }
+    };
 
-      // Use mock data for the selected ticker, or a default if not found
-      const selectedResult = mockResults[ticker] || {
-        summary: `${ticker} is showing mixed signals in recent trading. Consider monitoring closely before making decisions.`,
-        advice: `With $${investedAmount} at ${riskTolerance} risk, diversify across sectors to reduce exposure.`,
-        riskLevel: riskTolerance === "low" ? "Low" : riskTolerance === "medium" ? "Medium" : "High",
-        pros: ["Liquid stock", "Market presence", "Analyst coverage"],
-        cons: ["Recent volatility", "Earnings soon", "Sector headwinds"]
-      };
-      
-      setResult(selectedResult);
+    fetchChartData();
+  }, [confirmedTicker, chartPeriod]);
+  
+
+  // Send user inputs to the backend and display the AI-generated recommendation
+  const handleAnalyze = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const params = new URLSearchParams({
+        ticker: confirmedTicker,
+        invested_amount: investedAmount,
+        portfolio_size: portfolioSize,
+        user_risk: riskTolerance,
+      });
+      const res = await fetch(`http://localhost:5000/?${params}`, { method: "POST" });
+      const data = await res.json();
+
+      setResult({
+        summary: data.message,
+        advice: data.confidenceNote,
+        riskLevel: data.userRiskTolerance === "low" ? "Low"
+          : data.userRiskTolerance === "high" ? "High"
+          : "Medium",
+        pros: data.pros ?? [], 
+        cons: data.cons ?? [],
+      });
+    } catch (e) {
+      console.error("Analysis failed", e);
+    } finally {
       setLoading(false);
-    }, 2000); // 2 second delay to simulate loading
+    }
   };
 
   return (
@@ -174,7 +198,7 @@ export default function Home() {
           </p>
         </header>
 
-        <div className="grid gap-6 grid-cols-1 lg:grid-cols-[1fr_2fr] flex-1 min-h-0">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-[1fr_3fr] flex-1 min-h-0">
 
           {/* Stock Data Inputs */}
           <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5 overflow-y-auto self-start">
@@ -340,6 +364,55 @@ export default function Home() {
           {/* Results */}
           <section className="rounded-lg border border-zinc-700 bg-zinc-900 p-5 overflow-y-auto self-start">
             <h2 className="text-sm font-medium text-zinc-300">Results</h2>
+
+            {/* Chart period selector */}
+            {chartData.length > 0 && stockPrice !== null ? (
+              <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4">
+                <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-xs text-zinc-400">{confirmedTicker} — Price History</h3>
+                  {/* Period toggle buttons */}
+                  <div className="flex gap-1 flex-wrap">
+                   {[
+                      { label: "1W", value: "5d" },
+                      { label: "1M", value: "1mo" },
+                      { label: "6M", value: "6mo" },
+                      { label: "1Y", value: "1y" },
+                      { label: "ALL", value: "max" },
+                    ].map((p) => (
+                      <button
+                        key={p.value}
+                        onClick={() => setChartPeriod(p.value)}
+                        className={`px-2 py-1 rounded text-xs font-medium border ${
+                          chartPeriod === p.value
+                            ? "bg-white text-zinc-900 border-white"
+                            : "bg-zinc-900 text-zinc-400 border-zinc-700"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} domain={["auto", "auto"]} width={35} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: "8px" }}
+                      labelStyle={{ color: "#a1a1aa" }}
+                      itemStyle={{ color: "#ffffff" }}
+                    />
+                    <Line type="monotone" dataKey="price" stroke="#ffffff" strokeWidth={1.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-sm h-[calc(100%-2rem)] text-zinc-400">
+                Graph cannot be displayed for this stock.
+              </div>
+            )}
+
+            {/* Analysis results */}
             <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-800 p-4 text-sm h-[calc(100%-2rem)]">
               {loading ? (
                 <div className="text-zinc-400">Loading analysis...</div>
@@ -349,24 +422,21 @@ export default function Home() {
                     <h3 className="font-medium text-white">Summary</h3>
                     <p className="text-zinc-300">{result.summary}</p>
                   </div>
-                  
                   <div>
                     <h3 className="font-medium text-white">Advice</h3>
                     <p className="text-zinc-300">{result.advice}</p>
                   </div>
-                  
                   <div>
-                    <h3 className="font-medium text-white">Risk Level: 
+                    <h3 className="font-medium text-white">Risk Level:
                       <span className={`ml-2 ${
-                        result.riskLevel === "Low" ? "text-green-400" : 
-                        result.riskLevel === "Medium" ? "text-yellow-400" : 
+                        result.riskLevel === "Low" ? "text-green-400" :
+                        result.riskLevel === "Medium" ? "text-yellow-400" :
                         "text-red-400"
                       }`}>
                         {result.riskLevel}
                       </span>
                     </h3>
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <h4 className="font-medium text-green-400">Pros</h4>
