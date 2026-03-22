@@ -50,7 +50,7 @@ export default function Home() {
         return;
       }
       try {
-        const res = await fetch(`http://localhost:5000/search?q=${ticker}`);
+        const res = await fetch(`http://127.0.0.1:5001/search?q=${ticker}`);
         const data = await res.json();
         setSuggestions(data);
       } catch (e) {
@@ -66,12 +66,12 @@ export default function Home() {
     setPriceLoading(true); // start loading when ticker changes
     const delay = setTimeout(async () => {
       try {
-        const res = await fetch(`http://localhost:5000/price?ticker=${confirmedTicker}`);
+        const res = await fetch(`http://127.0.0.1:5001/price?ticker=${confirmedTicker}`);
         const data = await res.json();
         if (data.price) {
           setBasePriceUSD(data.price);
           setShares("1"); // reset to 1 share when new ticker loads
-          const rateRes = await fetch(`http://localhost:5000/convert?from=USD&to=${currency}`);
+          const rateRes = await fetch(`http://127.0.0.1:5001/convert?from=USD&to=${currency}`);
           const rateData = await rateRes.json();
           if (rateData.rate) {
             const converted = data.price * rateData.rate;
@@ -103,7 +103,7 @@ export default function Home() {
   if (!basePriceUSD) return;
   const fetchRate = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/convert?from=USD&to=${currency}`);
+      const res = await fetch(`http://127.0.0.1:5001/convert?from=USD&to=${currency}`);
       const data = await res.json();
       if (data.rate) {
         // convert from base USD price

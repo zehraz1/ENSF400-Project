@@ -1,15 +1,10 @@
 # app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import yfinance as yf
-from StockDataCollector import yf_aggregator
-from LLMHandler import generate_summary
-from functools import lru_cache
-import time
 import StockDataCache as cache
 
 endpoint = Flask(__name__)
-CORS(endpoint)
+CORS(endpoint, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 
 @endpoint.route('/', methods=['POST'])
@@ -95,5 +90,6 @@ def search_ticker():
     # and will be called quite often
     return cache.search_ticker_cache(query)
 
+
 if __name__ == '__main__':
-    endpoint.run()
+    endpoint.run(host='0.0.0.0')
