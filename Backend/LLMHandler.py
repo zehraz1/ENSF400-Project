@@ -1,8 +1,9 @@
 import os 
+import re
 import concurrent.futures 
 from typing import List, Dict, Any, Optional 
 
-import google.generativeai as genai
+from google import genai
 
 
 class LLMHandler:
@@ -26,17 +27,17 @@ class LLMHandler:
 
         # model starts as None until configured
         self.model = None
+        self.client = None
 
         # only configure Gemini if API key is available
         if self.api_key:
-            genai.configure(api_key=self.api_key) 
-            self.model = genai.GenerativeModel(self.model_name)
+            self.client = genai.Client(api_key=self.api_key)
 
     def is_configured(self) -> bool:
         """
         Check if the Gemini model is configured properly.
         """
-        return self.model is not None
+        return self.client is not None
     
     def _safe_to_text(self, value: Any) -> str:
         """
@@ -125,7 +126,10 @@ class LLMHandler:
         """ 
         if not self.is_configured():
             raise RuntimeError("Gemini API is not configured. Missing GEMINI_API_KEY")
-        response = self.model.generate_content(prompt)
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt
+        )
 
         # some SDK responses expose .text directly 
         text = getattr(response, "text", None)
@@ -162,7 +166,7 @@ class LLMHandler:
                 current_section = "summary"
                 content = line[len("summary:"):].strip()
                 if content:
-                    result["summary"] += content + " "
+                    result["summary"] += self._strip_markdown(content) + " "
                 continue
             
             if lower.startswith("pros:"):
@@ -174,19 +178,19 @@ class LLMHandler:
                 continue
 
             if current_section == "summary":
-                result["summary"] += line + " " 
+                result["summary"] += self._strip_markdown(line) + " " 
             
             elif current_section == "pros":
-                if line.startswith("-"):
-                    result["pros"].append(line[1:].strip())
+                if line.startswith("-") or line.startswith("*"):
+                    result["pros"].append(self._strip_markdown(line[1:].strip()))
                 else:
-                    result["pros"].append(line)
+                    result["pros"].append(self._strip_markdown(line))
             
             elif current_section == "cons":
-                if line.startswith("-"):
-                    result["cons"].append(line[1:].strip())
+                if line.startswith("-") or line.startswith("*"):
+                    result["cons"].append(self._strip_markdown(line[1:].strip()))
                 else:
-                    result["cons"].append(line)
+                    result["cons"].append(self._strip_markdown(line))
 
         # final cleanup
         result["summary"] = result["summary"].strip()
@@ -263,6 +267,10 @@ class LLMHandler:
                     "rawText": "",
                     "error": f"Timeout after {timeout_seconds} seconds",
                 }
-        
+    
+    def _strip_markdown(self, text: str) -> str:
+        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  
+        text = re.sub(r'\*(.*?)\*', r'\1', text)        
+        return text.strip()
 
 
