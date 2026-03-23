@@ -89,7 +89,9 @@ class LLMHandler:
             DO NOT guarantee returns. 
             DO NOT make absolute claims. 
             DO NOT tell the user to buy or sell. 
+            DO NOT repeat or include any of the input data in your response.
             DO NOT provide personalized financial advice. 
+            ONLY output the Summary, Pros, and Cons sections. Nothing else.
 
             Write the response in this format exactly: 
 
@@ -101,6 +103,8 @@ class LLMHandler:
 
             Cons:
             <3-5 bullet points of negative aspects> 
+
+            Use the following context to craft your analysis:
 
             Stock data: 
             Ticker: {ticker} 
@@ -161,6 +165,9 @@ class LLMHandler:
                 continue
 
             lower = line.lower()
+            
+            if "stock data:" in lower or "ticker:" in lower or "use the following" in lower:
+                break
 
             if lower.startswith("summary:"):
                 current_section = "summary"

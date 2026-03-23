@@ -175,10 +175,10 @@ export default function Home() {
       setResult({
         summary: data.message,
         advice: data.confidenceNote,
-        riskLevel: data.userRiskTolerance === "low" ? "Low"
-          : data.userRiskTolerance === "high" ? "High"
+        riskLevel: data.label === "Be Careful" ? "High"
+          : data.label === "Looks Reasonable" ? "Low"
           : "Medium",
-        pros: data.pros ?? [], 
+        pros: data.pros ?? [],
         cons: data.cons ?? [],
       });
     } catch (e) {
